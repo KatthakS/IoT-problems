@@ -1,0 +1,113 @@
+//************************************************************
+// this is a simple example that uses the painlessMesh library
+//
+// 1. sends a silly message to every node on the mesh at a random time between 1 and 5 seconds
+// 2. prints anything it receives to Serial.print
+//
+//
+//************************************************************
+#include "painlessMesh.h"
+
+#define   MESH_PREFIX     "whateverYouLike"
+#define   MESH_PASSWORD   "somethingSneaky"
+#define   MESH_PORT       5555
+#define   LED             25
+#define   PIR             23
+
+Scheduler userScheduler; // to control your personal task
+painlessMesh  mesh;
+bool led_value = false;
+
+
+// User stub
+void sendMessage() ; // Prototype so PlatformIO doesn't complain
+
+//Task taskSendMessage( TASK_SECOND * 5 , TASK_FOREVER, &sendMessage );
+
+void sendMessage() {
+  String msg;
+ 
+  //taskSendMessage.setInterval( random( TASK_SECOND * 1, TASK_SECOND * 5 ));
+  //Serial.println(is_changed);
+  //Serial.println(led_value);
+    if(led_value == 1) {
+      //Serial.println("value changed and it's ON now");
+      msg = "P, ";
+      msg += mesh.getNodeId();
+      msg += ", ON";
+      Serial.println(msg);
+      mesh.sendBroadcast( msg );
+    } else {
+      //Serial.println("value changed and it's OFF now");
+      msg = "P, ";
+      msg += mesh.getNodeId();
+      msg += ", OFF";
+      Serial.println(msg);
+      mesh.sendBroadcast( msg );
+    }
+  }
+
+// Needed for painless library
+void receivedCallback( uint32_t from, String &msg ) {
+  Serial.printf("Awesome! startHere: Received from %u msg=%s\n", from, msg.c_str());
+}
+
+void newConnectionCallback(uint32_t nodeId) {
+    Serial.printf("--> startHere: New Connection, nodeId = %u\n", nodeId);
+}
+
+void changedConnectionCallback() {
+  Serial.printf("Changed connections\n");
+}
+
+void nodeTimeAdjustedCallback(int32_t offset) {
+    Serial.printf("Adjusted time %u. Offset = %d\n", mesh.getNodeTime(),offset);
+}
+
+void setup() {
+  Serial.begin(115200);
+
+//mesh.setDebugMsgTypes( ERROR | MESH_STATUS | CONNECTION | SYNC | COMMUNICATION | GENERAL | MSG_TYPES | REMOTE ); // all types on
+  mesh.setDebugMsgTypes( ERROR | STARTUP );  // set before init() so that you can see startup messages
+
+  mesh.init( MESH_PREFIX, MESH_PASSWORD, &userScheduler, MESH_PORT );
+  mesh.onReceive(&receivedCallback);
+  mesh.onNewConnection(&newConnectionCallback);
+  mesh.onChangedConnections(&changedConnectionCallback);
+  mesh.onNodeTimeAdjusted(&nodeTimeAdjustedCallback);
+
+  //userScheduler.addTask( taskSendMessage );
+  //taskSendMessage.enable();
+  pinMode(LED,OUTPUT); // Sets the LED as an output
+  pinMode(PIR,INPUT); // Sets the PIR as an input
+}
+
+void loop() {
+  // it will run the user scheduler as well
+  bool motion = digitalRead(PIR); // Read the PIR
+
+    if (!motion) {
+      digitalWrite(LED,HIGH); // Turns on the LED     
+      if(led_value == false) {
+          Serial.println("State Changed");
+          Serial.println(led_value);
+          led_value = true;
+          sendMessage();
+      }
+      //Serial.println("LED is ON");
+    } else {
+      Serial.println(motion);
+      digitalWrite(LED,LOW);
+      if(led_value == true) {
+        Serial.println("State Changed2");          
+        Serial.println(led_value);
+        led_value = false;
+        sendMessage();
+      }
+      //Serial.println("LED is OFF!");
+      
+    }
+    delay(1000);
+
+    mesh.update();
+}
